@@ -1,0 +1,10 @@
+name: lambda-generate-api-tests
+version: 1.0.0
+description: Generate Vitest E2E black-box tests for one GraphQL operation or REST endpoint from a detail design.
+input: /lambda-generate-api-tests {path-or-name}
+output: E2E test file at tests/e2e/graphql/<kebab-operation>.e2e-spec.ts or tests/e2e/rest/<kebab-endpoint>.e2e-spec.ts
+script: none
+templates: templates/*
+context_budget: none
+prev_skill: lambda-generate-unit-tests
+next_skill: none

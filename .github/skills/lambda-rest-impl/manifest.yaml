@@ -1,0 +1,10 @@
+name: lambda-rest-impl
+version: 1.0.0
+description: Implement a REST API (API Gateway + Lambda) from a detail design document.
+input: /lambda-rest-impl {path-to-detail-design.md}
+output: REST API source under src/modules/<module>/ and related router/path updates
+script: none
+templates: none
+context_budget: none
+prev_skill: lambda-rest-design
+next_skill: lambda-spec-review

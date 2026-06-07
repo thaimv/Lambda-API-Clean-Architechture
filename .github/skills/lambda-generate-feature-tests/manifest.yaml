@@ -1,0 +1,10 @@
+name: lambda-generate-feature-tests
+version: 1.0.0
+description: Generate Vitest E2E feature tests that chain multiple API calls from a feature spec.
+input: /lambda-generate-feature-tests {feature-name-or-spec-path}
+output: E2E test file at tests/e2e/features/<kebab-feature-name>.e2e-spec.ts
+script: none
+templates: templates/*
+context_budget: none
+prev_skill: lambda-generate-api-tests
+next_skill: none

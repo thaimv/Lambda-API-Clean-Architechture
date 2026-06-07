@@ -1,0 +1,172 @@
+{
+  "info": {
+    "_postman_id": "7e32b503-fd11-48e9-9d4d-7137501943bc",
+    "name": "LAMBDA-AUTH",
+    "description": "Auth flow (Collection Runner): A Cognito login → B auth/credential → C temp AWS credentials.\n\nRequires environment **LAMBDA-ENV** with placeholders replaced. Step C sets ACCESS_KEY, SECRET_KEY, SESSION_TOKEN.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "16795564"
+  },
+  "item": [
+    {
+      "name": "A - Cognito InitiateAuth",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "function getVar(key) {",
+              "  const value = pm.environment.get(key);",
+              "  if (!value || value.startsWith('YOUR_')) {",
+              "    throw new Error(`Set ${key} in environment LAMBDA-ENV`);",
+              "  }",
+              "  return value;",
+              "}",
+              "",
+              "const clientId = getVar('CLIENT_ID');",
+              "const username = getVar('USERNAME');",
+              "const password = getVar('PASSWORD');",
+              "",
+              "pm.variables.set('INITIATE_AUTH_BODY', JSON.stringify({",
+              "  AuthFlow: 'USER_PASSWORD_AUTH',",
+              "  ClientId: clientId,",
+              "  AuthParameters: { USERNAME: username, PASSWORD: password },",
+              "}));"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "const idToken = body.AuthenticationResult?.IdToken;",
+              "pm.test('A: Got IdToken', () => pm.expect(idToken).to.be.a('string'));",
+              "pm.environment.set('ID_TOKEN', idToken);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/x-amz-json-1.1" },
+          { "key": "X-Amz-Target", "value": "AWSCognitoIdentityProviderService.InitiateAuth" }
+        ],
+        "body": { "mode": "raw", "raw": "{{INITIATE_AUTH_BODY}}" },
+        "url": {
+          "raw": "https://cognito-idp.{{REGION}}.amazonaws.com/",
+          "protocol": "https",
+          "host": ["cognito-idp", "{{REGION}}", "amazonaws", "com"],
+          "path": [""]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "B - Auth Credential",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "function getVar(key) {",
+              "  const value = pm.environment.get(key);",
+              "  if (!value || value.startsWith('YOUR_')) {",
+              "    throw new Error(`Set ${key} in environment LAMBDA-ENV`);",
+              "  }",
+              "  return value;",
+              "}",
+              "pm.variables.set('X_AUTH_API_KEY_RESOLVED', getVar('X_AUTH_API_KEY'));",
+              "pm.variables.set('COOKIE_NAME_RESOLVED', getVar('COOKIE_NAME'));",
+              "pm.variables.set('AUTH_API_URL_RESOLVED', getVar('AUTH_API_URL'));"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "const data = body.data ?? body;",
+              "pm.test('B: Got identityId', () => pm.expect(data.identityId).to.be.a('string'));",
+              "pm.environment.set('IDENTITY_ID', data.identityId);",
+              "pm.environment.set('IDENTITY_LOGIN_TOKEN', data.token || pm.environment.get('ID_TOKEN'));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-api-key", "value": "{{X_AUTH_API_KEY_RESOLVED}}" },
+          { "key": "Cookie", "value": "{{COOKIE_NAME_RESOLVED}}={{ID_TOKEN}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{}" },
+        "url": "{{AUTH_API_URL_RESOLVED}}"
+      },
+      "response": []
+    },
+    {
+      "name": "C - GetCredentialsForIdentity",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "function getVar(key) {",
+              "  const value = pm.environment.get(key);",
+              "  if (!value || value.startsWith('YOUR_')) {",
+              "    throw new Error(`Set ${key} in environment LAMBDA-ENV`);",
+              "  }",
+              "  return value;",
+              "}",
+              "const provider = getVar('LOGIN_PROVIDER');",
+              "const token = pm.environment.get('IDENTITY_LOGIN_TOKEN');",
+              "if (!token) {",
+              "  throw new Error('Run step B first (IDENTITY_LOGIN_TOKEN is empty)');",
+              "}",
+              "pm.variables.set('CREDENTIALS_BODY', JSON.stringify({",
+              "  IdentityId: pm.environment.get('IDENTITY_ID'),",
+              "  Logins: { [provider]: token },",
+              "}));"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const creds = pm.response.json().Credentials;",
+              "pm.test('C: Got AWS credentials', () => pm.expect(creds.AccessKeyId).to.be.a('string'));",
+              "pm.environment.set('ACCESS_KEY', creds.AccessKeyId);",
+              "pm.environment.set('SECRET_KEY', creds.SecretKey);",
+              "pm.environment.set('SESSION_TOKEN', creds.SessionToken);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/x-amz-json-1.1" },
+          { "key": "X-Amz-Target", "value": "AWSCognitoIdentityService.GetCredentialsForIdentity" }
+        ],
+        "body": { "mode": "raw", "raw": "{{CREDENTIALS_BODY}}" },
+        "url": {
+          "raw": "https://cognito-identity.{{REGION}}.amazonaws.com/",
+          "protocol": "https",
+          "host": ["cognito-identity", "{{REGION}}", "amazonaws", "com"],
+          "path": [""]
+        }
+      },
+      "response": []
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+name: lambda-generate-unit-tests
+version: 1.0.0
+description: Generate Vitest unit tests for all layers (controller, use case, repository, DTO) of a domain module.
+input: /lambda-generate-unit-tests {module-name-or-path}
+output: Unit test files under tests/unit-test/modules/<module>/
+script: none
+templates: templates/*
+context_budget: none
+prev_skill:
+  - lambda-graphql-impl
+  - lambda-rest-impl
+next_skill: lambda-generate-api-tests

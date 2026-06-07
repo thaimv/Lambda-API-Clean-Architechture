@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "generated_at": "2026-06-14T22:10:52+07:00",
+  "project": {
+    "name": "LambdaAPI",
+    "root": ".",
+    "purpose": "Base/template backend API for AWS Lambda — Clean Architecture skeleton with a single example `user` domain module"
+  },
+  "repo_layout": {
+    "kind": "monolith-modular",
+    "areas": {
+      "presenter": ["public-api", "appsync-api", "auth-api"],
+      "composition_modules": ["public-api", "appsync-api", "auth-api"],
+      "domain_modules": ["user", "auth"],
+      "infrastructure": ["src/common/datasources", "src/config/di", "src/config/routes"]
+    }
+  },
+  "stack": {
+    "languages": ["TypeScript"],
+    "frameworks": ["InversifyJS", "Prisma", "Zod", "Vitest", "AWS Lambda", "AppSync"],
+    "databases": {
+      "relational": "Aurora PostgreSQL (via Prisma)",
+      "nosql": "DynamoDB (infra available via @aws-sdk/lib-dynamodb; not used by any current module)"
+    },
+    "package_manager": "npm",
+    "node": ">=22.0.0"
+  },
+  "capabilities": {
+    "host": "github",
+    "github_mcp": false,
+    "gitlab_mcp": false,
+    "azure_devops_mcp": false,
+    "eslint": true,
+    "prettier": true
+  },
+  "commands": {
+    "build": "npm run build:public-api && npm run build:appsync-api && npm run build:auth-api",
+    "build:public-api": "node deploy/scripts/bundle.js public-api",
+    "build:appsync-api": "node deploy/scripts/bundle.js appsync-api",
+    "build:auth-api": "node deploy/scripts/bundle.js auth-api",
+    "generate": "prisma generate",
+    "docker:up": "docker compose -f docker/docker-compose.yml up -d --build",
+    "docker:down": "docker compose -f docker/docker-compose.yml down",
+    "migrate:dev": "npx dotenv-cli -e envs/.env -- prisma migrate dev",
+    "migrate:deploy": "npx dotenv-cli -e envs/.env -- prisma migrate deploy",
+    "migrate:reset": "npx dotenv-cli -e envs/.env -- prisma migrate reset",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write",
+    "format:ci": "prettier . --check",
+    "test": "vitest -c vitest.config.mjs",
+    "test:ci": "vitest run -c vitest.config.mjs --coverage",
+    "test:coverage": "vitest -c vitest.config.mjs --coverage",
+    "test:e2e": "vitest -c ./vitest-e2e.config.mjs",
+    "test:e2e:coverage": "vitest -c ./vitest-e2e.config.mjs --coverage"
+  },
+  "key_files": {
+    "di_bootstrap": "src/config/di/di.config.ts",
+    "di_tokens": "src/common/constants/di.const.ts",
+    "rest_router": "src/config/routes/rest-api-router.ts",
+    "graphql_router": "src/config/routes/graph-ql-router.ts",
+    "rest_lambda_entry": "src/presenter/lambdas/public-api.ts",
+    "auth_lambda_entry": "src/presenter/lambdas/auth-api.ts",
+    "appsync_lambda_entry": "src/presenter/lambdas/appsync-api.ts",
+    "prisma_schema": "prisma/schema.prisma",
+    "app_config": "src/config/app.config.ts"
+  },
+  "lambdas": {
+    "public-api": {
+      "entry": "src/presenter/lambdas/public-api.ts",
+      "module": "src/modules/public-api.module.ts",
+      "router": "RestApiRouter",
+      "auth": "enabled (Cognito/Gigya identity from API Gateway)"
+    },
+    "auth-api": {
+      "entry": "src/presenter/lambdas/auth-api.ts",
+      "module": "src/modules/auth-api.module.ts",
+      "router": "RestApiRouter",
+      "auth": "mixed — RestApiRouter(false); e.g. POST /auth/credential uses Cognito identity exchange"
+    },
+    "appsync-api": {
+      "entry": "src/presenter/lambdas/appsync-api.ts",
+      "module": "src/modules/appsync-api.module.ts",
+      "router": "GraphQLRouter",
+      "auth": "AppSync resolver context"
+    }
+  },
+  "modules": {
+    "public-api": {
+      "area": "composition",
+      "purpose": "Composition module wiring datasource DI + domain modules for REST Lambda",
+      "lambda": ["public-api"],
+      "db": [],
+      "has_tests": false
+    },
+    "auth-api": {
+      "area": "composition",
+      "purpose": "Composition module for auth REST Lambda (Cognito identity token exchange)",
+      "lambda": ["auth-api"],
+      "db": [],
+      "has_tests": false
+    },
+    "appsync-api": {
+      "area": "composition",
+      "purpose": "Composition module wiring datasource DI + domain modules for GraphQL Lambda",
+      "lambda": ["appsync-api"],
+      "db": [],
+      "has_tests": false
+    },
+    "user": {
+      "area": "domain",
+      "purpose": "Example domain module — create/upsert user info, read current user",
+      "lambda": ["public-api", "appsync-api"],
+      "db": ["aurora"],
+      "has_tests": true
+    },
+    "auth": {
+      "area": "domain",
+      "purpose": "Auth domain — exchange access token for Cognito federated identity token",
+      "lambda": ["auth-api"],
+      "db": [],
+      "has_tests": true
+    }
+  }
+}

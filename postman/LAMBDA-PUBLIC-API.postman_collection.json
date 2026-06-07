@@ -1,0 +1,46 @@
+{
+  "info": {
+    "_postman_id": "70880d20-5695-460a-abac-2aa5f1856e1d",
+    "name": "LAMBDA-PUBLIC-API",
+    "description": "Public REST API (IAM + x-api-key).\n\nRun **LAMBDA-AUTH** collection first, or set ACCESS_KEY / SECRET_KEY / SESSION_TOKEN manually in **LAMBDA-ENV**.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "16795564"
+  },
+  "item": [
+    {
+      "name": "GET /user",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "['PUBLIC_API_URL', 'X_PUBLIC_API_KEY', 'ACCESS_KEY', 'SECRET_KEY', 'SESSION_TOKEN', 'REGION'].forEach((key) => {",
+              "  const value = pm.environment.get(key);",
+              "  if (!value || value.startsWith('YOUR_')) {",
+              "    throw new Error(`Set ${key} in environment LAMBDA-ENV (run LAMBDA-AUTH first for credentials)`);",
+              "  }",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "awsv4",
+          "awsv4": [
+            { "key": "sessionToken", "value": "{{SESSION_TOKEN}}", "type": "string" },
+            { "key": "region", "value": "{{REGION}}", "type": "string" },
+            { "key": "secretKey", "value": "{{SECRET_KEY}}", "type": "string" },
+            { "key": "accessKey", "value": "{{ACCESS_KEY}}", "type": "string" },
+            { "key": "service", "value": "execute-api", "type": "string" }
+          ]
+        },
+        "method": "GET",
+        "header": [{ "key": "x-api-key", "value": "{{X_PUBLIC_API_KEY}}", "type": "text" }],
+        "url": "{{PUBLIC_API_URL}}"
+      },
+      "response": []
+    }
+  ]
+}

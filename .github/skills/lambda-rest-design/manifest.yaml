@@ -1,0 +1,10 @@
+name: lambda-rest-design
+version: 1.0.0
+description: Generate a REST API detail design document for LambdaAPI.
+input: /lambda-rest-design {path-to-spec.md | description}
+output: Detail design at document/detail-designs/rest/<module>/<api-name>.md
+script: none
+templates: none
+context_budget: none
+prev_skill: none
+next_skill: lambda-rest-impl

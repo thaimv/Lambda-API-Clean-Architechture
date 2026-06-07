@@ -1,0 +1,132 @@
+name: LambdaAPIs CD
+
+# Orchestrator only — project-specific config lives here (like Azure variable groups).
+# Reusable workflows (cd-*.yml) are generic: pass resolved values via with:.
+#
+# Constants (literal in with: — GitHub disallows env context in reusable workflow inputs):
+#   BUILD_ARTIFACT_NAME = lambda-build-artifacts
+#   PRISMA_LAYER_ZIP    = prisma-layer.zip
+#
+# Note: caller jobs cannot use `environment:` with `uses:` (reusable workflows).
+# resolve-env reads GitHub Environment vars and exposes them as job outputs.
+#
+# Add a REST Lambda:
+#   1. Append {"name":"...","zip":"....zip"} to lambdas_config below
+#   2. Add output in resolve-env + copy deploy-public-api job block
+#
+# Add an AppSync stack (Lambda + schema):
+#   1. Append {"name":"...","zip":"....zip","schema":"src/presenter/graphql/schema.graphql"}
+#   2. Copy deploy-appsync-lambda + deploy-appsync-schema job blocks
+
+on:
+  push:
+    branches:
+      - develop
+      - staging
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/cd-build.yml
+    with:
+      build_artifact_name: lambda-build-artifacts
+      lambdas_config: |
+        [
+          {
+            "name": "appsync-api",
+            "zip": "appsync-api.zip",
+            "schema": "src/presenter/graphql/schema.graphql"
+          },
+          {
+            "name": "public-api",
+            "zip": "public-api.zip"
+          },
+          {
+            "name": "auth-api",
+            "zip": "auth-api.zip"
+          }
+        ]
+
+  resolve-env:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ needs.build.outputs.target_env }}
+    outputs:
+      lambda_function_appsync_name: ${{ steps.cfg.outputs.lambda_function_appsync_name }}
+      lambda_function_public_api_name: ${{ steps.cfg.outputs.lambda_function_public_api_name }}
+      lambda_function_auth_api_name: ${{ steps.cfg.outputs.lambda_function_auth_api_name }}
+      lambda_alias_name: ${{ steps.cfg.outputs.lambda_alias_name }}
+      keep_lambda_versions: ${{ steps.cfg.outputs.keep_lambda_versions }}
+      appsync_api_id: ${{ steps.cfg.outputs.appsync_api_id }}
+    steps:
+      - name: Resolve GitHub Environment config
+        id: cfg
+        run: |
+          set -euo pipefail
+          echo "lambda_function_appsync_name=${{ vars.LAMBDA_FUNCTION_APPSYNC_NAME }}" >> "$GITHUB_OUTPUT"
+          echo "lambda_function_public_api_name=${{ vars.LAMBDA_FUNCTION_PUBLIC_API_NAME }}" >> "$GITHUB_OUTPUT"
+          echo "lambda_function_auth_api_name=${{ vars.LAMBDA_FUNCTION_AUTH_API_NAME }}" >> "$GITHUB_OUTPUT"
+          echo "lambda_alias_name=${{ vars.LAMBDA_ALIAS_NAME }}" >> "$GITHUB_OUTPUT"
+          echo "keep_lambda_versions=${{ vars.KEEP_LAMBDA_VERSIONS }}" >> "$GITHUB_OUTPUT"
+          echo "appsync_api_id=${{ vars.APPSYNC_API_ID }}" >> "$GITHUB_OUTPUT"
+
+  deploy-prisma-layer:
+    needs: [build, resolve-env]
+    secrets: inherit
+    uses: ./.github/workflows/cd-deploy-prisma-layer.yml
+    with:
+      target_env: ${{ needs.build.outputs.target_env }}
+      prisma_layer_zip: prisma-layer.zip
+      keep_layer_versions: ${{ needs.resolve-env.outputs.keep_lambda_versions }}
+
+  deploy-appsync-lambda:
+    needs: [build, resolve-env, deploy-prisma-layer]
+    secrets: inherit
+    uses: ./.github/workflows/cd-deploy-lambda.yml
+    with:
+      target_env: ${{ needs.build.outputs.target_env }}
+      build_artifact_name: lambda-build-artifacts
+      artifact_name: appsync-api
+      zip_file: appsync-api.zip
+      function_name: ${{ needs.resolve-env.outputs.lambda_function_appsync_name }}
+      alias_name: ${{ needs.resolve-env.outputs.lambda_alias_name }}
+      keep_lambda_versions: ${{ needs.resolve-env.outputs.keep_lambda_versions }}
+
+  deploy-appsync-schema:
+    needs: [build, resolve-env, deploy-appsync-lambda]
+    secrets: inherit
+    uses: ./.github/workflows/cd-deploy-appsync-schema.yml
+    with:
+      target_env: ${{ needs.build.outputs.target_env }}
+      build_artifact_name: lambda-build-artifacts
+      artifact_name: appsync-api
+      appsync_api_id: ${{ needs.resolve-env.outputs.appsync_api_id }}
+
+  deploy-public-api:
+    needs: [build, resolve-env, deploy-prisma-layer]
+    secrets: inherit
+    uses: ./.github/workflows/cd-deploy-lambda.yml
+    with:
+      target_env: ${{ needs.build.outputs.target_env }}
+      build_artifact_name: lambda-build-artifacts
+      artifact_name: public-api
+      zip_file: public-api.zip
+      function_name: ${{ needs.resolve-env.outputs.lambda_function_public_api_name }}
+      alias_name: ${{ needs.resolve-env.outputs.lambda_alias_name }}
+      keep_lambda_versions: ${{ needs.resolve-env.outputs.keep_lambda_versions }}
+
+  deploy-auth-api:
+    needs: [build, resolve-env]
+    secrets: inherit
+    uses: ./.github/workflows/cd-deploy-lambda.yml
+    with:
+      target_env: ${{ needs.build.outputs.target_env }}
+      build_artifact_name: lambda-build-artifacts
+      artifact_name: auth-api
+      zip_file: auth-api.zip
+      function_name: ${{ needs.resolve-env.outputs.lambda_function_auth_api_name }}
+      alias_name: ${{ needs.resolve-env.outputs.lambda_alias_name }}
+      keep_lambda_versions: ${{ needs.resolve-env.outputs.keep_lambda_versions }}

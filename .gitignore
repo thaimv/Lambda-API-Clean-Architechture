@@ -1,0 +1,30 @@
+# Build output
+dist/
+build/
+out/
+
+# Node modules
+node_modules/
+
+# Environment files (actual secrets — *.example files are committed)
+envs/.env
+envs/.env.e2e
+envs/*.env
+!envs/*.env.example
+!envs/.env.e2e.example
+
+# Test reports / coverage
+__test_reports__/
+
+# OS
+.DS_Store
+
+# IDE
+.idea
+
+# Manually created zip files
+*.zip
+
+# .github runtime context (AI-generated state, not config)
+.github/brain/contexts/*.md
+!.github/brain/contexts/*.template.md

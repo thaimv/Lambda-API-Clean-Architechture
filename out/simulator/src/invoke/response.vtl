@@ -1,0 +1,11 @@
+#set($payload = $util.defaultIfNull($context.result.json, $context.result))
+
+#if($payload.error.error_message)
+  $util.error($payload.error.error_message, $payload.result.code, null, $payload.result.code)
+#end
+
+#if($payload.data)
+  $util.toJson($payload.data)
+#else
+  $util.toJson($payload)
+#end

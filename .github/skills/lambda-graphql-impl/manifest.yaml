@@ -1,0 +1,10 @@
+name: lambda-graphql-impl
+version: 1.0.0
+description: Implement a GraphQL API (AppSync + Lambda) from a detail design document.
+input: /lambda-graphql-impl {path-to-detail-design.md}
+output: GraphQL API source under src/modules/<module>/ and related schema/router updates
+script: none
+templates: none
+context_budget: none
+prev_skill: lambda-graphql-design
+next_skill: lambda-spec-review

@@ -1,0 +1,151 @@
+name: LambdaAPIs CD — Deploy AppSync Schema
+
+on:
+  workflow_call:
+    inputs:
+      target_env:
+        description: GitHub Environment name
+        required: true
+        type: string
+      build_artifact_name:
+        description: Combined artifact name from build job
+        required: true
+        type: string
+      artifact_name:
+        description: Lambda package folder inside the build artifact
+        required: true
+        type: string
+      appsync_api_id:
+        description: AppSync GraphQL API ID
+        required: true
+        type: string
+
+jobs:
+  deploy-schema:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    environment: ${{ inputs.target_env }}
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ inputs.build_artifact_name }}
+          path: artifacts
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Deploy AppSync schema
+        shell: bash
+        env:
+          APPSYNC_API_ID: ${{ inputs.appsync_api_id }}
+        run: |
+          set -euo pipefail
+
+          SCHEMA_PATH="artifacts/${{ inputs.artifact_name }}/schema.graphql"
+          if [[ ! -f "${SCHEMA_PATH}" ]]; then
+            echo "AppSync schema file not found in artifact." >&2
+            exit 1
+          fi
+
+          aws appsync start-schema-creation \
+            --api-id "${APPSYNC_API_ID}" \
+            --definition "fileb://${SCHEMA_PATH}" \
+            --output json >/dev/null
+
+          for attempt in $(seq 1 10); do
+            SCHEMA_STATUS=$(aws appsync get-schema-creation-status \
+              --api-id "${APPSYNC_API_ID}" \
+              --query 'status' --output text)
+
+            if [[ "$SCHEMA_STATUS" == "SUCCESS" || "$SCHEMA_STATUS" == "ACTIVE" ]]; then
+              echo "AppSync schema deployment completed with status: ${SCHEMA_STATUS}"
+              break
+            fi
+
+            if [[ "$SCHEMA_STATUS" == "FAILED" ]]; then
+              aws appsync get-schema-creation-status \
+                --api-id "${APPSYNC_API_ID}" \
+                --query 'details' --output text
+              exit 1
+            fi
+
+            if [[ "$attempt" -eq 10 ]]; then
+              echo "Timed out waiting for schema deployment."
+              exit 1
+            fi
+
+            sleep 5
+          done
+
+      - name: Deploy AppSync resolvers
+        shell: bash
+        env:
+          APPSYNC_API_ID: ${{ inputs.appsync_api_id }}
+          DATA_SOURCE_NAME: AppsyncLambdaDs
+          # JSON required — CLI shorthand `name=...` is parsed as --field-name name
+          APPSYNC_JS_RUNTIME: '{"name":"APPSYNC_JS","runtimeVersion":"1.0.0"}'
+        run: |
+          set -euo pipefail
+
+          ARTIFACT_DIR="artifacts/${{ inputs.artifact_name }}"
+          SCHEMA_PATH="${ARTIFACT_DIR}/schema.graphql"
+          RESOLVER_CODE="${ARTIFACT_DIR}/resolvers/invoke-request.js"
+
+          if [[ ! -f "${RESOLVER_CODE}" ]]; then
+            echo "AppSync resolver code not found in artifact." >&2
+            exit 1
+          fi
+
+          extract_graphql_fields() {
+            local type_name="$1"
+            sed -n "/^type ${type_name} {/,/^}/p" "${SCHEMA_PATH}" \
+              | grep -E '^  [_A-Za-z]' \
+              | sed -E 's/^  ([_A-Za-z][_0-9A-Za-z]*).*/\1/'
+          }
+
+          deploy_resolver() {
+            local type_name="$1"
+            local field_name="$2"
+
+            if aws appsync get-resolver \
+              --api-id "${APPSYNC_API_ID}" \
+              --type-name "${type_name}" \
+              --field-name "${field_name}" >/dev/null 2>&1; then
+              aws appsync update-resolver \
+                --api-id "${APPSYNC_API_ID}" \
+                --type-name "${type_name}" \
+                --field-name "${field_name}" \
+                --data-source-name "${DATA_SOURCE_NAME}" \
+                --kind UNIT \
+                --runtime "${APPSYNC_JS_RUNTIME}" \
+                --code "file://${RESOLVER_CODE}"
+            else
+              aws appsync create-resolver \
+                --api-id "${APPSYNC_API_ID}" \
+                --type-name "${type_name}" \
+                --field-name "${field_name}" \
+                --data-source-name "${DATA_SOURCE_NAME}" \
+                --kind UNIT \
+                --runtime "${APPSYNC_JS_RUNTIME}" \
+                --code "file://${RESOLVER_CODE}"
+            fi
+
+            echo "Resolver ${type_name}.${field_name} deployed."
+          }
+
+          # One shared invoke-request resolver per Query/Mutation field (skip placeholders).
+          while IFS= read -r field_name; do
+            [[ "${field_name}" == "_empty" ]] && continue
+            deploy_resolver Mutation "${field_name}"
+          done < <(extract_graphql_fields Mutation)
+
+          while IFS= read -r field_name; do
+            [[ "${field_name}" == "_empty" ]] && continue
+            deploy_resolver Query "${field_name}"
+          done < <(extract_graphql_fields Query)

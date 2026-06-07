@@ -1,0 +1,10 @@
+name: lambda-graphql-design
+version: 1.0.0
+description: Generate a GraphQL API detail design document for LambdaAPI.
+input: /lambda-graphql-design {path-to-spec.md | description}
+output: Detail design at document/detail-designs/graphql/<module>/<api-name>.md
+script: none
+templates: none
+context_budget: none
+prev_skill: none
+next_skill: lambda-graphql-impl

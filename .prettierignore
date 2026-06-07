@@ -1,0 +1,12 @@
+# Build folder
+build/
+out/
+
+# Graphql schema
+**/schema.graphql
+
+# Typescript config
+tsconfig.json
+
+# AI agent config / skill templates (not product source)
+.github/**/*.ts
