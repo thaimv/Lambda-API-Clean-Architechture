@@ -18,6 +18,7 @@ schema {
 # ======= Query =========
 type Query {
   _empty: String
+  _empty: String
 }
 
 # ======= Mutation =========
