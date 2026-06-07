@@ -43,6 +43,7 @@ Auto-push is controlled solely by the `--auto_push` flag:
 - **EXCEPTION**: auto-push is allowed only when `--auto_push=true`.
 - **NEVER** auto-vote on PRs. Only recommend a vote and ask user to vote manually.
 - Do not merge, abandon, or auto-approve PRs.
+- **MUST NOT** push duplicate inline comments — use marker-based idempotency in [workflow.md Step 3](./workflow.md#step-3-confirm--push--await-approval) (list existing comments, skip findings whose marker is already posted, de-duplicate by `filePath` + `startLine` + `category`).
 - **All PR comments MUST be in English** — no Vietnamese or other language in inline/thread comments.
 
 ## Workflow

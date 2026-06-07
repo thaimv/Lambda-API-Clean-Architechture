@@ -14,11 +14,13 @@
   code_suggestion;
 }
 ```
-````
 
 📎 Rule: {rule_name}
 
+<!-- copilot-review: {filePath}:{startLine}:{category} -->
 ````
+
+> `{category}` MUST be one of the Finding Categories in `review-criteria.md`. The HTML comment is required for idempotent push (skip if marker already exists on the PR).
 
 ## Summary Thread (first comment on PR)
 ```markdown
@@ -26,7 +28,7 @@
 
 **Reviewer**: AI Code Review Agent
 **Date**: {date}
-**Decision**: {decision}
+**Recommended vote**: {recommended_vote}
 
 ### Statistics
 - 🔴 Critical: {n}

@@ -98,36 +98,11 @@ Conditional:
 
 Load relevant module docs from `brain/modules/` for affected modules.
 
-Review each changed file against the loaded rules:
+Review each changed file against the loaded rules and [review-criteria.md Checks by Category](./review-criteria.md#checks-by-category):
 
-### Layer Checks (architecture.md)
-
-- Presenter layer has no business logic
-- UseCases depend only on Repository interfaces (not implementations)
-- Repositories only accessed via interfaces in UseCases
-- No cross-module direct imports
-- DI bindings updated for new classes
-
-### Code Quality Checks (typescript-coding-standards.md)
-
-- Naming conventions followed
-- No `any` types without justification
-- Proper error handling with custom error classes
-- Zod validation at Lambda boundary
-- async/await used correctly
-
-### Test Checks (testing-strategy.md, if tests changed)
-
-- Tests use constructor injection with mocks
-- Edge cases and error paths covered
-- E2E test covers new Lambda routes
-
-### Security Checks
-
-- No credentials, secrets, or tokens in code
-- No SQL injection risk (Prisma parameterized queries used)
-- No direct user input passed to shell commands
-- PII/sensitive data not logged
+- Walk each affected **category** (`ARCHITECTURE`, `LAYERING`, `VALIDATION`, …) — only sections whose files/layers changed.
+- Tag each finding with one category (marker key) and severity (🔴–🟢) from `review-criteria.md`.
+- Also apply conditional rules: `architecture.md`, `typescript-coding-standards.md`, `testing-strategy.md` (when tests changed).
 
 ---
 
@@ -173,11 +148,12 @@ Review each changed file against the loaded rules:
 
 ---
 
-## Step 4: VOTE RECOMMENDATION
+## Step 4: DECISION & VOTE RECOMMENDATION
 
-Show recommended vote based on findings (do NOT vote automatically):
+Derive Decision and Recommended vote from [review-criteria.md Decision & Vote Mapping](./review-criteria.md#decision--vote-mapping) (do NOT vote automatically):
 
 ```
-📊 Recommended vote: {Approved / Approved with suggestions / Waiting for author}
+📊 Decision: {APPROVE / APPROVE_WITH_COMMENTS / REQUEST_CHANGES}
+📊 Recommended vote: {Approved / Approved with suggestions / Waiting for author / Rejected}
 ⚠️  You must vote manually on the PR page.
 ```
