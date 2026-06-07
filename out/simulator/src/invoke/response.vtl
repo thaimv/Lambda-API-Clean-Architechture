@@ -1,0 +1,6 @@
+#set($error = $context.result.error)
+
+#if($error)
+  $util.error($error.message, $error.extensions.code, null, $error.extensions.code)
+#end
+$util.toJson($context.result)

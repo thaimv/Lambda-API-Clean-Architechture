@@ -1,0 +1,24 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "offline": "serverless offline start --verbose",
+    "rest": "serverless invoke local -f appRestApi"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "aws-sdk": "^2.1692.0",
+    "cfn-resolver-lib": "^1.1.7",
+    "serverless": "^4.21.0",
+    "serverless-appsync-plugin": "^2.8.0",
+    "serverless-appsync-simulator": "^0.20.0",
+    "serverless-offline": "^14.7.1"
+  },
+  "devDependencies": {
+    "serverless-offline-local-authorizers-plugin": "^1.2.0"
+  }
+}

@@ -1,0 +1,38 @@
+# Build folder
+dist/
+build/
+build_*/
+
+# Docs
+docs/
+
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.development
+.env.staging
+.env.production
+.env.docker
+
+# Sam CLI build folder
+**/.aws-sam
+
+# Test reports/coverage
+coverage/
+__test_reports__/
+
+.DS_Store
+
+# AWS Lambda Layers
+layers/
+
+.idea
+
+# manually created zip files
+*.zip
+
+# .github runtime context (AI-generated state, not config)
+.github/brain/contexts/*.md
+!.github/brain/contexts/*.template.md

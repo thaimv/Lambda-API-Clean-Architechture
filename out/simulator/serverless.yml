@@ -1,0 +1,86 @@
+service: simulator
+
+provider:
+  name: aws
+  region: ${opt:region, 'eu-west-1'}
+  stage: ${opt:stage, 'local'}
+  runtime: nodejs22.x
+  runtimeManagement: auto
+  memorySize: 1024
+  timeout: 60
+
+plugins:
+  - serverless-appsync-plugin
+  - serverless-appsync-simulator
+  - serverless-offline
+
+custom:
+  appsync-simulator:
+    apiKey: 'da2-fakeApiId123456'
+    location: .
+    port: 20002
+    wsPort: 20003
+    watch: false
+
+  serverless-offline:
+    noPrependStageInUrl: true
+    httpPort: 3000
+    lambdaPort: 3001
+
+  appSync:
+    name: ${self:service}-${self:provider.stage}
+    authenticationType: API_KEY
+    schema: '../../src/presenter/graphql/schema.graphql'
+    apiKeys:
+      - name: my-api-key
+        description: My API Key
+    mappingTemplatesLocation: src/invoke
+    mappingTemplates:
+      - dataSource: myLambda
+        type: Mutation
+        field: createUserInfo
+        request: request.vtl
+        response: response.vtl
+      
+    dataSources:
+      - type: AWS_LAMBDA
+        name: myLambda
+        config:
+          functionName: myLambda
+
+functions:
+  myLambda:
+    handler: '../../build/appsync-api/app.handler'
+    runtime: ${self:provider.runtime}
+    environment: ${file(env.yml):${self:provider.stage}}
+    timeout: 60
+    memorySize: 1024
+    provisionedConcurrency: 50
+    reservedConcurrency: 50
+  publicRestApi:
+    handler: '../../build/public-rest-api/app.handler'
+    runtime: ${self:provider.runtime}
+    environment: ${file(env.yml):${self:provider.stage}}
+    timeout: 60
+    memorySize: 1024
+    provisionedConcurrency: 50
+    reservedConcurrency: 50
+    events:
+      - http:
+          path: /{proxy+}
+          method: ANY
+          cors: true
+
+resources:
+  Resources:
+    GraphQlApi:
+      Type: AWS::AppSync::GraphQLApi
+      Properties:
+        Name: ${self:custom.appSync.name}
+        AuthenticationType: ${self:custom.appSync.authenticationType}
+
+    GraphQlSchema:
+      Type: AWS::AppSync::GraphQLSchema
+      Properties:
+        ApiId: '__DYNAMIC_API_ID__'
+        Definition: '../../src/presenter/graphql/schema.graphql'

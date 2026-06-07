@@ -1,0 +1,115 @@
+trigger:
+  - develop
+  - staging
+
+name: 'LambdaAPI CD'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - ${{ if eq(variables['Build.SourceBranchName'], 'staging') }}:
+      - group: 'api-staging-variables'
+      - name: TARGET_ENV
+        value: 'api-staging'
+  - ${{ else }}:
+      - group: 'api-develop-variables'
+      - name: TARGET_ENV
+        value: 'api-develop'
+  - name: LAMBDA_APPSYNC
+    value: appsync-api
+  - name: LAMBDA_APPSYNC_ZIP
+    value: $(LAMBDA_APPSYNC).zip
+  - name: APPSYNC_SCHEMA_FILE
+    value: src/presenter/graphql/schema.graphql
+  - name: APPSYNC_SCHEMA_ARTIFACT_FILE
+    value: $(System.DefaultWorkingDirectory)/artifacts/$(LAMBDA_APPSYNC)/schema.graphql
+  - name: LAMBDA_PUBLIC_REST_API
+    value: public-rest-api
+  - name: LAMBDA_PUBLIC_REST_API_ZIP
+    value: $(LAMBDA_PUBLIC_REST_API).zip
+
+stages:
+  - stage: BuildStage
+    displayName: 'Build'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build'
+        steps:
+          - script: |
+              echo "Build from Build.SourceBranchName:$(Build.SourceBranchName) to TARGET_ENV:$(TARGET_ENV)"
+            displayName: 'Show Environment Info'
+
+          - task: UseNode@1
+            inputs:
+              version: '22.x'
+            displayName: 'Install Node.js'
+
+          - script: |
+              npm ci
+            displayName: 'Clean Install'
+
+          - template: templates/build-graphql-lambda-steps.yml
+            parameters:
+              displayName: 'Lambda AppSync'
+              apiName: 'LAMBDA_APPSYNC'
+              zipFileName: 'LAMBDA_APPSYNC_ZIP'
+              schemaFilePath: '$(APPSYNC_SCHEMA_FILE)'
+
+          - template: templates/build-lambda-steps.yml
+            parameters:
+              displayName: 'Lambda Public Rest Api'
+              apiName: 'LAMBDA_PUBLIC_REST_API'
+              zipFileName: 'LAMBDA_PUBLIC_REST_API_ZIP'
+
+  - stage: DeployAppSyncStage
+    displayName: 'DeployLambdaAppSync'
+    dependsOn: BuildStage
+    condition: succeeded()
+    jobs:
+      - deployment: DeployLambdaAppSync
+        displayName: 'DeployLambdaAppSync'
+        environment: '$(TARGET_ENV)'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: DownloadPipelineArtifact@2
+                  inputs:
+                    buildType: current
+                    artifact: '$(LAMBDA_APPSYNC)'
+                    path: '$(System.DefaultWorkingDirectory)/artifacts/$(LAMBDA_APPSYNC)'
+                  displayName: 'Download Lambda AppSync Package'
+
+                - template: templates/deploy-graphql-lambda-steps.yml
+                  parameters:
+                    displayName: 'Lambda AppSync'
+                    functionName: '$(LAMBDA_FUNCTION_APPSYNC_NAME)'
+                    zipFileName: '$(System.DefaultWorkingDirectory)/artifacts/$(LAMBDA_APPSYNC)/$(LAMBDA_APPSYNC_ZIP)'
+                    schemaFilePath: '$(APPSYNC_SCHEMA_ARTIFACT_FILE)'
+                    appSyncApiId: '$(APPSYNC_API_ID)'
+
+  - stage: DeployPublicRestApiStage
+    displayName: 'DeployLambdaPublicRestApi'
+    dependsOn: BuildStage
+    condition: succeeded()
+    jobs:
+      - deployment: DeployLambdaPublicRestApi
+        displayName: 'DeployLambdaPublicRestApi'
+        environment: '$(TARGET_ENV)'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: DownloadPipelineArtifact@2
+                  inputs:
+                    buildType: current
+                    artifact: '$(LAMBDA_PUBLIC_REST_API)'
+                    path: '$(System.DefaultWorkingDirectory)/artifacts/$(LAMBDA_PUBLIC_REST_API)'
+                  displayName: 'Download Lambda Public Rest Api Package'
+
+                - template: templates/deploy-lambda-steps.yml
+                  parameters:
+                    displayName: 'Lambda Public Rest Api'
+                    functionName: '$(LAMBDA_FUNCTION_PUBLIC_REST_API_NAME)'
+                    zipFileName: '$(System.DefaultWorkingDirectory)/artifacts/$(LAMBDA_PUBLIC_REST_API)/$(LAMBDA_PUBLIC_REST_API_ZIP)'

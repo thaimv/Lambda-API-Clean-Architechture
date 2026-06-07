@@ -1,0 +1,45 @@
+pr:
+  branches:
+    include:
+      - '*'
+
+name: 'LambdaAPI CI'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - task: UseNode@0
+    inputs:
+      versionSpec: '22.x'
+    displayName: 'Use Node.js 22.x'
+
+  - script: |
+      npm install
+    displayName: 'Install Dependencies'
+
+  - script: |
+      npm run lint
+    displayName: 'Run Linting'
+
+  - script: |
+      npm run format:ci
+    displayName: 'Run Prettier Format'
+
+  - script: |
+      npm run test:ci
+    displayName: 'Run Unit Tests'
+
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFiles: '$(System.DefaultWorkingDirectory)/__test_reports__/unit-test/junit.xml'
+      testRunTitle: 'Vitest Test Results'
+    displayName: 'Publish Test Results'
+
+  - task: PublishCodeCoverageResults@1
+    inputs:
+      codeCoverageTool: 'Cobertura'
+      summaryFileLocation: '$(System.DefaultWorkingDirectory)/__test_reports__/unit-test/coverage/cobertura-coverage.xml'
+      reportDirectory: '$(System.DefaultWorkingDirectory)/__test_reports__/unit-test/coverage'
+      failIfCoverageEmpty: true
+    displayName: 'Publish Code Coverage Results'
