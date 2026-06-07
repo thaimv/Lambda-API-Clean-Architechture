@@ -1,0 +1,20 @@
+# Build folder
+dist/
+build/
+out/
+
+# Sam CLI build folder
+**/.aws-sam
+
+# Test coverage
+coverage/
+
+# AWS Lambda Layers
+layers/
+
+# Graphql schema
+**/schema.graphql
+
+# Typescript config
+tsconfig.json
+

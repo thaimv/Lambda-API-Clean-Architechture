@@ -1,0 +1,35 @@
+parameters:
+  - name: displayName
+    type: string
+  - name: apiName
+    type: string
+  - name: zipFileName
+    type: string
+
+steps:
+  - script: |
+      set -euo pipefail
+      echo "Building ${{ parameters.displayName }}..."
+      npm run build ${{ format('$({0})', parameters.apiName) }}
+      echo "${{ parameters.displayName }} built successfully."
+    displayName: 'Build ${{ parameters.displayName }}'
+
+  - script: |
+      set -euo pipefail
+      echo "Zipping ${{ parameters.displayName }}..."
+      zip -r -j "${{ format('$({0})', parameters.zipFileName) }}" "build/${{ format('$({0})', parameters.apiName) }}"
+      echo "${{ parameters.displayName }} zipped successfully."
+    displayName: 'Zip ${{ parameters.displayName }}'
+
+  - script: |
+      set -euo pipefail
+      echo "${{ parameters.displayName }} zipped"
+      ls -lah "${{ format('$({0})', parameters.zipFileName) }}"
+    displayName: 'Check ${{ parameters.displayName }} Package'
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: "${{ format('$({0})', parameters.zipFileName) }}"
+      artifact: "${{ format('$({0})', parameters.apiName) }}"
+      publishLocation: 'pipeline'
+    displayName: 'Publish ${{ parameters.displayName }} Package'

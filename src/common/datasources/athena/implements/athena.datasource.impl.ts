@@ -1,0 +1,24 @@
+import { AthenaClient, GetQueryResultsCommand } from '@aws-sdk/client-athena';
+import { inject, injectable } from 'inversify';
+
+import { DI } from '@/common/constants/di.const';
+import type { IAthenaDatasource } from '@/common/datasources/athena/athena.datasource';
+import type { QueryResultsInput, QueryResultsOutput } from '@/common/types/datasources/athena.type';
+import type { AppConfig } from '@/config/app.config';
+
+@injectable()
+export class AthenaDatasource implements IAthenaDatasource {
+  private readonly client: AthenaClient;
+
+  constructor(
+    @inject(DI.APP_CONFIG)
+    appConfig: AppConfig,
+    client?: AthenaClient,
+  ) {
+    this.client = client ?? new AthenaClient({ region: appConfig.awsConfig.region });
+  }
+
+  async getQueryResults(input: QueryResultsInput): Promise<QueryResultsOutput> {
+    return this.client.send(new GetQueryResultsCommand(input));
+  }
+}
