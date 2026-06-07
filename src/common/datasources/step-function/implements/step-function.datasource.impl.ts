@@ -1,0 +1,28 @@
+import { SFNClient, StartExecutionCommand } from '@aws-sdk/client-sfn';
+import { inject, injectable } from 'inversify';
+
+import { DI } from '@/common/constants/di.const';
+import type { IStepFunctionDatasource } from '@/common/datasources/step-function/step-function.datasource';
+import type {
+  StartExecutionInput,
+  StartExecutionOutput,
+} from '@/common/types/datasources/step-function.type';
+import type { AppConfig } from '@/config/app.config';
+
+@injectable()
+export class StepFunctionDatasource implements IStepFunctionDatasource {
+  private readonly client: SFNClient;
+
+  constructor(
+    @inject(DI.APP_CONFIG)
+    appConfig: AppConfig,
+    client?: SFNClient,
+  ) {
+    this.client = client ?? new SFNClient({ region: appConfig.awsConfig.region });
+  }
+
+  async startExecution(input: StartExecutionInput): Promise<StartExecutionOutput> {
+    const command = new StartExecutionCommand(input);
+    return this.client.send(command);
+  }
+}

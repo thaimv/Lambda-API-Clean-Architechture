@@ -1,0 +1,59 @@
+parameters:
+  - name: displayName
+    type: string
+  - name: apiName
+    type: string
+  - name: zipFileName
+    type: string
+  - name: schemaFilePath
+    type: string
+  - name: schemaFileName
+    type: string
+    default: schema.graphql
+
+steps:
+  - script: |
+      set -euo pipefail
+      echo "Building ${{ parameters.displayName }}..."
+      npm run build ${{ format('$({0})', parameters.apiName) }}
+      echo "${{ parameters.displayName }} built successfully."
+    displayName: 'Build ${{ parameters.displayName }}'
+
+  - script: |
+      set -euo pipefail
+      echo "Zipping ${{ parameters.displayName }}..."
+      zip -r -j "${{ format('$({0})', parameters.zipFileName) }}" "build/${{ format('$({0})', parameters.apiName) }}"
+      echo "${{ parameters.displayName }} zipped successfully."
+    displayName: 'Zip ${{ parameters.displayName }}'
+
+  - script: |
+      set -euo pipefail
+      echo "${{ parameters.displayName }} zipped"
+      ls -lah "${{ format('$({0})', parameters.zipFileName) }}"
+    displayName: 'Check ${{ parameters.displayName }} Package'
+
+  - script: |
+      set -euo pipefail
+      ARTIFACT_DIR="$(Build.ArtifactStagingDirectory)/${{ format('$({0})', parameters.apiName) }}"
+      SCHEMA_SOURCE="${{ parameters.schemaFilePath }}"
+      SCHEMA_TARGET="$ARTIFACT_DIR/${{ parameters.schemaFileName }}"
+
+      if [[ ! -f "$SCHEMA_SOURCE" ]]; then
+        echo "GraphQL schema file not found: $SCHEMA_SOURCE" >&2
+        exit 1
+      fi
+
+      mkdir -p "$ARTIFACT_DIR"
+      cp "${{ format('$({0})', parameters.zipFileName) }}" "$ARTIFACT_DIR/"
+      cp "$SCHEMA_SOURCE" "$SCHEMA_TARGET"
+
+      echo "${{ parameters.displayName }} artifact contents"
+      ls -lah "$ARTIFACT_DIR"
+    displayName: 'Stage ${{ parameters.displayName }} Artifact'
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: "$(Build.ArtifactStagingDirectory)/${{ format('$({0})', parameters.apiName) }}"
+      artifact: "${{ format('$({0})', parameters.apiName) }}"
+      publishLocation: 'pipeline'
+    displayName: 'Publish ${{ parameters.displayName }} Package'

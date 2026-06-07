@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "generated_at": "2026-06-07T00:00:00+07:00",
+  "project": {
+    "name": "LambdaAPI",
+    "root": ".",
+    "purpose": "Base/template backend API for AWS Lambda — Clean Architecture skeleton with a single example `users` domain module"
+  },
+  "repo_layout": {
+    "kind": "monolith-modular",
+    "areas": {
+      "presenter": ["public-rest-api", "appsync-api"],
+      "composition_modules": ["public-rest-api", "appsync-api"],
+      "domain_modules": ["users"],
+      "infrastructure": ["src/common/datasources", "src/config/di", "src/config/routes"]
+    }
+  },
+  "stack": {
+    "languages": ["TypeScript"],
+    "frameworks": ["InversifyJS", "Prisma", "Zod", "Vitest", "AWS Lambda", "AppSync"],
+    "databases": {
+      "relational": "Aurora PostgreSQL (via Prisma)",
+      "nosql": "DynamoDB (infra available via @aws-sdk/lib-dynamodb; not used by any current module)"
+    },
+    "package_manager": "npm",
+    "node": ">=22.0.0"
+  },
+  "capabilities": {
+    "host": "github",
+    "github_mcp": true,
+    "gitlab_mcp": false,
+    "azure_devops_mcp": false,
+    "eslint": true,
+    "prettier": true
+  },
+  "commands": {
+    "build": "npm run build (bundles public-rest-api + appsync-api via deploy/scripts/bundle.js)",
+    "build:public-rest-api": "node deploy/scripts/bundle.js public-rest-api",
+    "build:appsync-api": "node deploy/scripts/bundle.js appsync-api",
+    "generate": "prisma generate",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write",
+    "format:ci": "prettier . --check",
+    "test": "vitest -c vitest.config.mjs",
+    "test:ci": "vitest run -c vitest.config.mjs --coverage",
+    "test:e2e": "vitest -c ./vitest-e2e.config.mjs"
+  },
+  "key_files": {
+    "di_bootstrap": "src/config/di/di.config.ts",
+    "di_tokens": "src/common/constants/di.const.ts",
+    "rest_router": "src/config/routes/rest-api-router.ts",
+    "graphql_router": "src/config/routes/graph-ql-router.ts",
+    "rest_lambda_entry": "src/presenter/lambdas/public-rest-api.ts",
+    "appsync_lambda_entry": "src/presenter/lambdas/appsync-api.ts",
+    "prisma_schema": "prisma/schema.prisma",
+    "app_config": "src/config/app.config.ts"
+  },
+  "lambdas": {
+    "public-rest-api": {
+      "entry": "src/presenter/lambdas/public-rest-api.ts",
+      "module": "src/modules/public-rest-api.module.ts",
+      "router": "RestApiRouter",
+      "auth": "enabled (Cognito/Gigya identity from API Gateway)"
+    },
+    "appsync-api": {
+      "entry": "src/presenter/lambdas/appsync-api.ts",
+      "module": "src/modules/appsync-api.module.ts",
+      "router": "GraphQLRouter",
+      "auth": "AppSync resolver context"
+    }
+  },
+  "modules": {
+    "public-rest-api": {
+      "area": "composition",
+      "purpose": "Composition module wiring datasource DI + domain modules for REST Lambda",
+      "lambda": ["public-rest-api"],
+      "db": [],
+      "has_tests": false
+    },
+    "appsync-api": {
+      "area": "composition",
+      "purpose": "Composition module wiring datasource DI + domain modules for GraphQL Lambda",
+      "lambda": ["appsync-api"],
+      "db": [],
+      "has_tests": false
+    },
+    "users": {
+      "area": "domain",
+      "purpose": "Example domain module — create/upsert user info, read current user",
+      "lambda": ["public-rest-api", "appsync-api"],
+      "db": ["aurora"],
+      "has_tests": true
+    }
+  }
+}

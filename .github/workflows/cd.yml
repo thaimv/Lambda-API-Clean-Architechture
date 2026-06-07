@@ -1,0 +1,282 @@
+name: LambdaAPIs CD
+
+on:
+  push:
+    branches:
+      - develop
+      - staging
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  LAMBDA_APPSYNC: appsync-api
+  LAMBDA_APPSYNC_ZIP: appsync-api.zip
+  LAMBDA_PUBLIC_REST_API: public-rest-api
+  LAMBDA_PUBLIC_REST_API_ZIP: public-rest-api.zip
+  APPSYNC_SCHEMA_FILE: src/presenter/graphql/schema.graphql
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      target_env: ${{ steps.set-env.outputs.target_env }}
+      aws_role_secret_name: ${{ steps.set-env.outputs.aws_role_secret_name }}
+      lambda_appsync_function_name_var: ${{ steps.set-env.outputs.lambda_appsync_function_name_var }}
+      lambda_public_rest_function_name_var: ${{ steps.set-env.outputs.lambda_public_rest_function_name_var }}
+      appsync_api_id_var: ${{ steps.set-env.outputs.appsync_api_id_var }}
+      keep_lambda_versions: ${{ steps.set-env.outputs.keep_lambda_versions }}
+      lambda_alias_name: ${{ steps.set-env.outputs.lambda_alias_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select environment by branch
+        id: set-env
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == "staging" ]]; then
+            echo "target_env=api-staging" >> "$GITHUB_OUTPUT"
+            echo "aws_role_secret_name=AWS_ROLE_TO_ASSUME_STAGING" >> "$GITHUB_OUTPUT"
+            echo "lambda_appsync_function_name_var=LAMBDA_FUNCTION_APPSYNC_NAME_STAGING" >> "$GITHUB_OUTPUT"
+            echo "lambda_public_rest_function_name_var=LAMBDA_FUNCTION_PUBLIC_REST_API_NAME_STAGING" >> "$GITHUB_OUTPUT"
+            echo "appsync_api_id_var=APPSYNC_API_ID_STAGING" >> "$GITHUB_OUTPUT"
+            echo "keep_lambda_versions=${KEEP_LAMBDA_VERSIONS_STAGING:-5}" >> "$GITHUB_OUTPUT"
+            echo "lambda_alias_name=${LAMBDA_ALIAS_NAME_STAGING:-stg}" >> "$GITHUB_OUTPUT"
+          else
+            echo "target_env=api-develop" >> "$GITHUB_OUTPUT"
+            echo "aws_role_secret_name=AWS_ROLE_TO_ASSUME_DEVELOP" >> "$GITHUB_OUTPUT"
+            echo "lambda_appsync_function_name_var=LAMBDA_FUNCTION_APPSYNC_NAME_DEVELOP" >> "$GITHUB_OUTPUT"
+            echo "lambda_public_rest_function_name_var=LAMBDA_FUNCTION_PUBLIC_REST_API_NAME_DEVELOP" >> "$GITHUB_OUTPUT"
+            echo "appsync_api_id_var=APPSYNC_API_ID_DEVELOP" >> "$GITHUB_OUTPUT"
+            echo "keep_lambda_versions=${KEEP_LAMBDA_VERSIONS_DEVELOP:-5}" >> "$GITHUB_OUTPUT"
+            echo "lambda_alias_name=${LAMBDA_ALIAS_NAME_DEVELOP:-dev}" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          KEEP_LAMBDA_VERSIONS_DEVELOP: ${{ vars.KEEP_LAMBDA_VERSIONS_DEVELOP }}
+          KEEP_LAMBDA_VERSIONS_STAGING: ${{ vars.KEEP_LAMBDA_VERSIONS_STAGING }}
+          LAMBDA_ALIAS_NAME_DEVELOP: ${{ vars.LAMBDA_ALIAS_NAME_DEVELOP }}
+          LAMBDA_ALIAS_NAME_STAGING: ${{ vars.LAMBDA_ALIAS_NAME_STAGING }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Clean install
+        run: npm ci
+
+      - name: Build Lambda AppSync
+        run: npm run build -- "${LAMBDA_APPSYNC}"
+
+      - name: Build Lambda Public Rest Api
+        run: npm run build -- "${LAMBDA_PUBLIC_REST_API}"
+
+      - name: Zip Lambda AppSync
+        run: zip -r -j "${LAMBDA_APPSYNC_ZIP}" "build/${LAMBDA_APPSYNC}"
+
+      - name: Zip Lambda Public Rest Api
+        run: zip -r -j "${LAMBDA_PUBLIC_REST_API_ZIP}" "build/${LAMBDA_PUBLIC_REST_API}"
+
+      - name: Stage AppSync artifact
+        run: |
+          mkdir -p artifacts/${LAMBDA_APPSYNC}
+          cp "${LAMBDA_APPSYNC_ZIP}" "artifacts/${LAMBDA_APPSYNC}/"
+          cp "${APPSYNC_SCHEMA_FILE}" "artifacts/${LAMBDA_APPSYNC}/schema.graphql"
+
+      - name: Stage Public Rest artifact
+        run: |
+          mkdir -p artifacts/${LAMBDA_PUBLIC_REST_API}
+          cp "${LAMBDA_PUBLIC_REST_API_ZIP}" "artifacts/${LAMBDA_PUBLIC_REST_API}/"
+
+      - name: Upload AppSync artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.LAMBDA_APPSYNC }}
+          path: artifacts/${{ env.LAMBDA_APPSYNC }}
+
+      - name: Upload Public Rest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.LAMBDA_PUBLIC_REST_API }}
+          path: artifacts/${{ env.LAMBDA_PUBLIC_REST_API }}
+
+  deploy-appsync:
+    runs-on: ubuntu-latest
+    needs: build
+    environment: ${{ needs.build.outputs.target_env }}
+    steps:
+      - name: Download AppSync artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: appsync-api
+          path: artifacts/appsync-api
+
+      - name: Resolve env-dependent values
+        id: resolve
+        shell: bash
+        run: |
+          if [[ "${{ needs.build.outputs.lambda_appsync_function_name_var }}" == "LAMBDA_FUNCTION_APPSYNC_NAME_STAGING" ]]; then
+            echo "lambda_function_name=${LAMBDA_FUNCTION_APPSYNC_NAME_STAGING}" >> "$GITHUB_OUTPUT"
+            echo "appsync_api_id=${APPSYNC_API_ID_STAGING}" >> "$GITHUB_OUTPUT"
+            echo "aws_role_to_assume=${AWS_ROLE_TO_ASSUME_STAGING}" >> "$GITHUB_OUTPUT"
+          else
+            echo "lambda_function_name=${LAMBDA_FUNCTION_APPSYNC_NAME_DEVELOP}" >> "$GITHUB_OUTPUT"
+            echo "appsync_api_id=${APPSYNC_API_ID_DEVELOP}" >> "$GITHUB_OUTPUT"
+            echo "aws_role_to_assume=${AWS_ROLE_TO_ASSUME_DEVELOP}" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          LAMBDA_FUNCTION_APPSYNC_NAME_DEVELOP: ${{ vars.LAMBDA_FUNCTION_APPSYNC_NAME_DEVELOP }}
+          LAMBDA_FUNCTION_APPSYNC_NAME_STAGING: ${{ vars.LAMBDA_FUNCTION_APPSYNC_NAME_STAGING }}
+          APPSYNC_API_ID_DEVELOP: ${{ vars.APPSYNC_API_ID_DEVELOP }}
+          APPSYNC_API_ID_STAGING: ${{ vars.APPSYNC_API_ID_STAGING }}
+          AWS_ROLE_TO_ASSUME_DEVELOP: ${{ secrets.AWS_ROLE_TO_ASSUME_DEVELOP }}
+          AWS_ROLE_TO_ASSUME_STAGING: ${{ secrets.AWS_ROLE_TO_ASSUME_STAGING }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.resolve.outputs.aws_role_to_assume }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Update Lambda AppSync code
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ steps.resolve.outputs.lambda_function_name }}" \
+            --zip-file fileb://artifacts/appsync-api/${LAMBDA_APPSYNC_ZIP}
+          aws lambda wait function-updated \
+            --function-name "${{ steps.resolve.outputs.lambda_function_name }}"
+
+      - name: Publish Lambda AppSync version and update alias
+        run: |
+          NEW_VERSION=$(aws lambda publish-version \
+            --function-name "${{ steps.resolve.outputs.lambda_function_name }}" \
+            --query 'Version' --output text)
+          aws lambda update-alias \
+            --function-name "${{ steps.resolve.outputs.lambda_function_name }}" \
+            --name "${{ needs.build.outputs.lambda_alias_name }}" \
+            --function-version "$NEW_VERSION"
+
+      - name: Deploy AppSync schema
+        shell: bash
+        run: |
+          aws appsync start-schema-creation \
+            --api-id "${{ steps.resolve.outputs.appsync_api_id }}" \
+            --definition fileb://artifacts/appsync-api/schema.graphql \
+            --output json >/dev/null
+
+          for attempt in $(seq 1 10); do
+            SCHEMA_STATUS=$(aws appsync get-schema-creation-status \
+              --api-id "${{ steps.resolve.outputs.appsync_api_id }}" \
+              --query 'status' --output text)
+
+            if [[ "$SCHEMA_STATUS" == "SUCCESS" || "$SCHEMA_STATUS" == "ACTIVE" ]]; then
+              break
+            fi
+
+            if [[ "$SCHEMA_STATUS" == "FAILED" ]]; then
+              aws appsync get-schema-creation-status \
+                --api-id "${{ steps.resolve.outputs.appsync_api_id }}" \
+                --query 'details' --output text
+              exit 1
+            fi
+
+            if [[ "$attempt" -eq 10 ]]; then
+              echo "Timed out waiting for schema deployment."
+              exit 1
+            fi
+
+            sleep 5
+          done
+
+      - name: Delete old Lambda AppSync versions
+        continue-on-error: true
+        shell: bash
+        run: |
+          VERSIONS_TO_DELETE=$(aws lambda list-versions-by-function \
+            --function-name "${{ steps.resolve.outputs.lambda_function_name }}" \
+            --query "reverse(sort_by(Versions[?Version != '\$LATEST'], &to_number(Version)))[${{ needs.build.outputs.keep_lambda_versions }}:].Version" \
+            --output text)
+
+          if [[ -z "$VERSIONS_TO_DELETE" || "$VERSIONS_TO_DELETE" == "None" ]]; then
+            exit 0
+          fi
+
+          for VERSION in $VERSIONS_TO_DELETE; do
+            aws lambda delete-function \
+              --function-name "${{ steps.resolve.outputs.lambda_function_name }}" \
+              --qualifier "$VERSION"
+          done
+
+  deploy-public-rest:
+    runs-on: ubuntu-latest
+    needs: build
+    environment: ${{ needs.build.outputs.target_env }}
+    steps:
+      - name: Download Public Rest artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: public-rest-api
+          path: artifacts/public-rest-api
+
+      - name: Resolve env-dependent values
+        id: resolve
+        shell: bash
+        run: |
+          if [[ "${{ needs.build.outputs.lambda_public_rest_function_name_var }}" == "LAMBDA_FUNCTION_PUBLIC_REST_API_NAME_STAGING" ]]; then
+            echo "lambda_function_name=${LAMBDA_FUNCTION_PUBLIC_REST_API_NAME_STAGING}" >> "$GITHUB_OUTPUT"
+            echo "aws_role_to_assume=${AWS_ROLE_TO_ASSUME_STAGING}" >> "$GITHUB_OUTPUT"
+          else
+            echo "lambda_function_name=${LAMBDA_FUNCTION_PUBLIC_REST_API_NAME_DEVELOP}" >> "$GITHUB_OUTPUT"
+            echo "aws_role_to_assume=${AWS_ROLE_TO_ASSUME_DEVELOP}" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          LAMBDA_FUNCTION_PUBLIC_REST_API_NAME_DEVELOP: ${{ vars.LAMBDA_FUNCTION_PUBLIC_REST_API_NAME_DEVELOP }}
+          LAMBDA_FUNCTION_PUBLIC_REST_API_NAME_STAGING: ${{ vars.LAMBDA_FUNCTION_PUBLIC_REST_API_NAME_STAGING }}
+          AWS_ROLE_TO_ASSUME_DEVELOP: ${{ secrets.AWS_ROLE_TO_ASSUME_DEVELOP }}
+          AWS_ROLE_TO_ASSUME_STAGING: ${{ secrets.AWS_ROLE_TO_ASSUME_STAGING }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.resolve.outputs.aws_role_to_assume }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Update Lambda Public Rest code
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ steps.resolve.outputs.lambda_function_name }}" \
+            --zip-file fileb://artifacts/public-rest-api/${LAMBDA_PUBLIC_REST_API_ZIP}
+          aws lambda wait function-updated \
+            --function-name "${{ steps.resolve.outputs.lambda_function_name }}"
+
+      - name: Publish Lambda Public Rest version and update alias
+        run: |
+          NEW_VERSION=$(aws lambda publish-version \
+            --function-name "${{ steps.resolve.outputs.lambda_function_name }}" \
+            --query 'Version' --output text)
+          aws lambda update-alias \
+            --function-name "${{ steps.resolve.outputs.lambda_function_name }}" \
+            --name "${{ needs.build.outputs.lambda_alias_name }}" \
+            --function-version "$NEW_VERSION"
+
+      - name: Delete old Lambda Public Rest versions
+        continue-on-error: true
+        shell: bash
+        run: |
+          VERSIONS_TO_DELETE=$(aws lambda list-versions-by-function \
+            --function-name "${{ steps.resolve.outputs.lambda_function_name }}" \
+            --query "reverse(sort_by(Versions[?Version != '\$LATEST'], &to_number(Version)))[${{ needs.build.outputs.keep_lambda_versions }}:].Version" \
+            --output text)
+
+          if [[ -z "$VERSIONS_TO_DELETE" || "$VERSIONS_TO_DELETE" == "None" ]]; then
+            exit 0
+          fi
+
+          for VERSION in $VERSIONS_TO_DELETE; do
+            aws lambda delete-function \
+              --function-name "${{ steps.resolve.outputs.lambda_function_name }}" \
+              --qualifier "$VERSION"
+          done

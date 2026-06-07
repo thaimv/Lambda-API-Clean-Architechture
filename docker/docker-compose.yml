@@ -1,0 +1,26 @@
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    container_name: lambda-apis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: app
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./init-scripts:/docker-entrypoint-initdb.d
+
+  dynamodb:
+    image: amazon/dynamodb-local
+    container_name: lambda-apis-dynamodb
+    ports:
+      - '8000:8000'
+    command: '-jar DynamoDBLocal.jar -inMemory -sharedDb'
+
+volumes:
+  postgres_data:
